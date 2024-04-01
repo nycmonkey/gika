@@ -52,12 +52,7 @@ func (t *Client) Parse(body io.Reader, contentType string) (out []byte, err erro
 		return out, fmt.Errorf(resp.Status)
 	}
 	x := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
-	out, err = io.ReadAll(transform.NewReader(resp.Body, x))
-	if err != nil {
-		return
-	}
-	out = t.splitter.ReplaceAll(out, []byte("\n"))
-	return
+	return io.ReadAll(transform.NewReader(resp.Body, x))
 }
 
 // GetMetadata requests metadata about a file from an Apache Tika server
