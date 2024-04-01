@@ -172,6 +172,5 @@ func NewTikaFromDockerEnv() (*Client, error) {
 	}
 
 	u.Scheme = "http"
-	u.Path = "tika"
 	return NewTika(u.String())
 }
