@@ -1,11 +1,10 @@
-package tika
+package gika
 
 import (
 	"bufio"
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,17 +12,12 @@ import (
 	"strings"
 	"unicode"
 
+	"golang.org/x/text/runes"
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
 )
 
-var (
-	isMn = func(r rune) bool {
-		return unicode.Is(unicode.Mn, r) // Mn: nonspacing marks
-	}
-)
-
-type Tika struct {
+type Client struct {
 	client   *http.Client
 	url      string
 	splitter *regexp.Regexp
@@ -36,7 +30,7 @@ type FileInfo struct {
 }
 
 // Parse requests the text of a file from an Apache Tika server
-func (t *Tika) Parse(body io.Reader, contentType string) (out []byte, err error) {
+func (t *Client) Parse(body io.Reader, contentType string) (out []byte, err error) {
 	req, err := http.NewRequest("PUT", t.url+"/tika", body)
 	if err != nil {
 		return
@@ -45,6 +39,8 @@ func (t *Tika) Parse(body io.Reader, contentType string) (out []byte, err error)
 	if contentType != "" {
 		req.Header.Add("Content-Type", contentType)
 	}
+
+	req.Header.Add("Accept", "text/plain")
 
 	resp, err := t.client.Do(req)
 	if err != nil {
@@ -55,8 +51,8 @@ func (t *Tika) Parse(body io.Reader, contentType string) (out []byte, err error)
 	if resp.StatusCode != 200 {
 		return out, fmt.Errorf(resp.Status)
 	}
-	x := transform.Chain(norm.NFD, transform.RemoveFunc(isMn), norm.NFC)
-	out, err = ioutil.ReadAll(transform.NewReader(resp.Body, x))
+	x := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
+	out, err = io.ReadAll(transform.NewReader(resp.Body, x))
 	if err != nil {
 		return
 	}
@@ -65,7 +61,7 @@ func (t *Tika) Parse(body io.Reader, contentType string) (out []byte, err error)
 }
 
 // GetMetadata requests metadata about a file from an Apache Tika server
-func (t *Tika) GetMetadata(body io.Reader, filename string) (result map[string]string, err error) {
+func (t *Client) GetMetadata(body io.Reader, filename string) (result map[string]string, err error) {
 	req, err := http.NewRequest("PUT", t.url+"/meta", body)
 	if err != nil {
 		return
@@ -102,7 +98,7 @@ func (t *Tika) GetMetadata(body io.Reader, filename string) (result map[string]s
 }
 
 // DetectType requests the mime type of a file from an Apache Tika server
-func (t *Tika) DetectType(body io.Reader, filename string) (contentType string, err error) {
+func (t *Client) DetectType(body io.Reader, filename string) (contentType string, err error) {
 	req, err := http.NewRequest("PUT", t.url+"/detect/stream", body)
 	if err != nil {
 		return
@@ -119,7 +115,7 @@ func (t *Tika) DetectType(body io.Reader, filename string) (contentType string, 
 		return contentType, fmt.Errorf(resp.Status)
 	}
 	var dataType []byte
-	dataType, err = ioutil.ReadAll(resp.Body)
+	dataType, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return
 	}
@@ -127,7 +123,7 @@ func (t *Tika) DetectType(body io.Reader, filename string) (contentType string, 
 }
 
 // RecursiveParse requests the text and metadata for a container document and all embedded documents
-func (t *Tika) RecursiveParse(body io.Reader, contentType string) (out []byte, err error) {
+func (t *Client) RecursiveParse(body io.Reader, contentType string) (out []byte, err error) {
 	req, err := http.NewRequest("PUT", t.url+"/rmeta/text", body)
 	if err != nil {
 		return
@@ -145,7 +141,7 @@ func (t *Tika) RecursiveParse(body io.Reader, contentType string) (out []byte, e
 	if resp.StatusCode != 200 {
 		return out, fmt.Errorf(resp.Status)
 	}
-	out, err = ioutil.ReadAll(resp.Body)
+	out, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return
 	}
@@ -153,7 +149,7 @@ func (t *Tika) RecursiveParse(body io.Reader, contentType string) (out []byte, e
 	return
 }
 
-func NewTika(addr string) (*Tika, error) {
+func NewTika(addr string) (*Client, error) {
 	u, err := url.Parse(addr)
 	if err != nil {
 		return nil, err
@@ -161,10 +157,10 @@ func NewTika(addr string) (*Tika, error) {
 	u.Scheme = "http"
 	u.Path = ""
 	splitter := regexp.MustCompile(`(?m:\pZ*\n\pZ*\n+)`)
-	return &Tika{client: &http.Client{}, url: u.String(), splitter: splitter}, nil
+	return &Client{client: &http.Client{}, url: u.String(), splitter: splitter}, nil
 }
 
-func NewTikaFromDockerEnv() (*Tika, error) {
+func NewTikaFromDockerEnv() (*Client, error) {
 	tcpAddr := os.Getenv("TIKA_PORT")
 	if tcpAddr == "" {
 		return nil, fmt.Errorf("'TIKA_PORT' environment variable not set; expected to find the Tika endpoint")

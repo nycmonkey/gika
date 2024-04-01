@@ -1,4 +1,4 @@
-package tika
+package gika
 
 import (
 	"os"
