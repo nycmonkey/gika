@@ -30,6 +30,31 @@ type FileInfo struct {
 }
 
 // Parse requests the text of a file from an Apache Tika server
+func (t *Client) PlainText(body io.Reader, contentType string) (out []byte, err error) {
+	req, err := http.NewRequest("PUT", t.url+"/tika", body)
+	if err != nil {
+		return
+	}
+
+	if contentType != "" {
+		req.Header.Add("Content-Type", contentType)
+	}
+
+	req.Header.Add("Accept", "text/plain")
+
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return out, fmt.Errorf(resp.Status)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+// Parse requests the text of a file from an Apache Tika server
 func (t *Client) Parse(body io.Reader, contentType string) (out []byte, err error) {
 	req, err := http.NewRequest("PUT", t.url+"/tika", body)
 	if err != nil {
